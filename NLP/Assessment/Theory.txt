@@ -1,0 +1,159 @@
+================================================================================
+                    NLP & MACHINE LEARNING SCENARIO ANSWERS                     
+================================================================================
+
+--------------------------------------------------------------------------------
+[S 1] SCENARIO: Chatbot Routing
+--------------------------------------------------------------------------------
+
+* TWO MANDATORY NLP TECHNIQUES:
+  1. Intent Classification:
+     Identifies the underlying goal or purpose behind a customer's message (e.g., 
+     mapping "Where is my order?" to Track_Order). This is necessary because the 
+     chatbot cannot route the message to the correct fulfillment system or support 
+     department without knowing what the user wants to achieve.
+     
+  2. Named Entity Recognition (NER):
+     Extracts specific pieces of structured information from the unstructured text 
+     (e.g., extracting specific order IDs, dates, or food items). This is necessary 
+     because knowing the intent is not enough; the bot needs the specific variable data 
+     to query the database and execute an action.
+
+* IMPACT ON CHATBOT ACCURACY IF REMOVED:
+  - Without Intent Classification: Chatbot accuracy would plummet completely. The bot 
+    would treat all incoming messages identically or rely strictly on keyword matching, 
+    leading to massive misrouting (e.g., routing "My food arrived cold" to cancellation 
+    simply because it contains the word "order").
+    
+  - Without NER: The chatbot might understand what the user wants to do, but it would 
+    fail to execute the action autonomously. It would be forced to repeatedly ask the 
+    user for information they already provided (e.g., "What is your order number?"), 
+    creating a repetitive, low-accuracy loop that degrades user satisfaction.
+
+
+--------------------------------------------------------------------------------
+[S 2] SCENARIO: Text Preprocessing Pipeline
+--------------------------------------------------------------------------------
+
+* THE PREPROCESSING PIPELINE (IN EXACT ORDER):
+  1. Text Cleaning & Noise Removal: Strip HTML tags, special characters, and punctuation. 
+     Emojis can either be stripped or converted into text tokens if they carry sentiment.
+  2. Case Folding: Convert all text to lowercase so words like "Delicious" and "delicious" 
+     are mapped to the exact same token.
+  3. Tokenization: Split the continuous string of text into individual words or tokens. 
+  4. Stopword Removal: Filter out high-frequency, low-meaning words like "the", "is", "a".
+  5. Lemmatization: Reduce words to their base or dictionary form (e.g., "delivered", 
+     "delivering", and "delivers" all map to "deliver").
+
+* JUSTIFICATION OF THE ORDER:
+  Noise removal and case folding must happen first to standardise the raw string before 
+  splitting it. Tokenization must occur next because stopword removal and lemmatization 
+  operate strictly on a list of individual tokens, not a single massive string block. 
+  Lemmatization happens last so that base forms are extracted cleanly from words that 
+  have already been lowercase-standardised and stripped of surrounding punctuation.
+
+* RISKS OF SKIPPING STOPWORD REMOVAL:
+  Skipping stopword removal increases the dimensionality of the text data with thousands 
+  of irrelevant features. Because filler words appear in almost every review, standard 
+  models (like Bag-of-Words or Naive Bayes) might assign undue statistical weight to them. 
+  This dilutes the signal of highly informative words (like "cold", "raw", "perfect"), 
+  hurting downstream classification accuracy.
+
+
+--------------------------------------------------------------------------------
+[S 3] SCENARIO: Ranking Menu Descriptions
+--------------------------------------------------------------------------------
+
+* METHOD COMPARISON:
+  - Bag of Words: Simply counts the frequency of words in a document. It treats all 
+    terms with equal importance, meaning common words like "with" or "without" carry 
+    the same structural weight as "spicy" or "chicken".
+    
+  - TF-IDF: Weighs terms based on how unique they are across the entire menu catalog. 
+    Words that appear everywhere get penalized with low weights, while unique words 
+    (like "spicy") get higher weights.
+
+* CHOSEN METHOD & WHY:
+  TF-IDF is the superior choice for this ranking task. It ensures that rare, highly 
+  descriptive search terms dictate the relevance score, pushing the most unique and 
+  targeted menu items to the top of the search results instead of items that simply 
+  contain generic filler words.
+
+* CRITICAL LIMITATION OF TF-IDF:
+  TF-IDF is completely blind to word order and semantic context. In the query "spicy 
+  chicken without onion", TF-IDF treats "without" and "onion" as independent terms. It 
+  will highly rank a menu description that reads "Spicy chicken with a side of fried onion" 
+  simply because it shares almost all the same keywords, entirely failing to understand 
+  the negative modifier "without".
+
+
+--------------------------------------------------------------------------------
+[S 4] SCENARIO: Naive Bayes Probabilistic Assumption
+--------------------------------------------------------------------------------
+
+* CORE ASSUMPTION:
+  The core assumption of Naive Bayes is Feature Independence. It assumes that the 
+  presence or absence of a particular feature (word) in a class is completely unrelated 
+  to the presence or absence of any other feature, given the class label.
+
+* REAL-WORLD VIOLATION EXAMPLE:
+  In a 'Delivery Issue' ticket, a customer might write: "The driver was late." In real 
+  language, the appearance of the word "driver" heavily increases the statistical 
+  probability that the word "late" will appear in the same sentence. They are highly 
+  dependent variables.
+
+* EFFECT ON CLASSIFICATION ACCURACY:
+  Because Naive Bayes treats "driver" and "late" as completely independent signals, it 
+  will double-count the correlation weight of these co-occurring terms. This over-exaggerates 
+  the model's confidence scores (probabilities near 0 or 1), leading to misclassifications 
+  when tickets contain mixed context or when dealing with subtle edge cases.
+
+
+--------------------------------------------------------------------------------
+[S 5] SCENARIO: Model Comparison & Class Imbalance
+--------------------------------------------------------------------------------
+
+* PRIORITISED EVALUATION METRICS:
+  1. F1-Score (Per Class): 
+     The harmonic mean of precision and recall. It ensures the model is evaluated on 
+     its ability to correctly identify the rare "Negative" and "Neutral" classes without 
+     suffering from high false positives or false negatives.
+     
+  2. Macro-Averaged Recall: 
+     Measures the average accuracy per class without letting the dominant "Positive" 
+     class overwhelm the score. A model that simply guesses "Positive" every time would 
+     score an abysmal 33.3% macro-recall, exposing its failure.
+
+* CLASS IMBALANCE MITIGATION TECHNIQUE:
+  SMOTE (Synthetic Minority Over-sampling Technique). This technique generates synthetic, 
+  realistic examples of the minority classes ("Negative" and "Neutral") in the feature 
+  space rather than simply duplicating existing records. This balances the training 
+  distribution so the algorithms can learn distinct boundary patterns for all three classes.
+
+
+--------------------------------------------------------------------------------
+[S 6] SCENARIO: Transformer Integration in Production
+--------------------------------------------------------------------------------
+
+* ATTENTION MECHANISM VS. RNNs:
+  Traditional RNNs process text sequentially, token-by-token. Over long text sequences, 
+  the mathematical gradients vanish, causing the model to "forget" information from the 
+  beginning of the sentence. The transformer's self-attention mechanism allows every word 
+  to look at every other word in the sequence simultaneously, regardless of distance. 
+  This captures long-range context across paragraphs perfectly and allows for highly 
+  parallelized training processing.
+
+* PRACTICAL PRODUCTION CHALLENGE:
+  High computational latency and footprint. Transformers are massive models that require 
+  intensive GPU compute operations. Processing hundreds of requests per minute in real time 
+  can quickly bottleneck server resources, causing slow API responses and sky-high 
+  infrastructure costs.
+
+* MITIGATION STRATEGY:
+  Model Quantization or Distillation. Quantization converts the model's weights from 
+  32-bit floating-point numbers to 8-bit integers, which drastically reduces memory usage 
+  and speeds up inference time on production servers with minimal loss in text-generation quality.
+
+================================================================================
+                                END OF DOCUMENT                                 
+================================================================================
