@@ -1,0 +1,104 @@
+# Section A — Concept Application
+
+**Modules 19–20: Fine-Tuning & Model Customization › Agentic AI (M20-A1)**
+
+---
+
+## S1 — Prompt Engineering vs RAG vs Fine-Tuning (dietary chatbot)
+
+**Recommendation: Prompt Engineering + RAG. No fine-tuning.**
+
+- **RAG carries the core workload.** Menu data updates daily and comes from partnered restaurants in real time — that is a moving target. RAG retrieves the current menu, live availability, and the user's order history at query time, so the chatbot never answers from stale, memorized data. Fine-tuning would require retraining (or re-adapting) constantly just to keep up with menu churn, which is neither practical nor cost-effective.
+- **Prompt engineering shapes the behaviour.** Instructions in the system prompt tell the model how to apply dietary-restriction filters to whatever the RAG step retrieves (e.g., "never recommend a dish containing an allergen the user has flagged"), and how to format recommendations consistently across a diverse user base.
+- **Why fine-tuning falls short here:** the model doesn't need a new *skill* or reasoning style — it needs *fresh facts*. Fine-tuning bakes patterns into static weights; it's suited to changing *how* a model behaves, not to keeping it current with daily-changing external data. Using it here would mean expensive, constant retraining that still lags behind real menu changes.
+- **Why prompt engineering alone falls short:** without retrieval, the model has no grounded source for today's menu or real-time availability and would hallucinate dishes or prices.
+
+---
+
+## S2 — LoRA under VRAM constraints
+
+**What LoRA modifies:** Full fine-tuning updates every weight matrix in the pre-trained model. LoRA instead **freezes all the original pre-trained weights** and injects small trainable **low-rank decomposition matrices (A and B)** alongside select weight matrices (typically the attention projection layers). Only these small matrices — a tiny fraction of the original parameter count — are trained; at inference the low-rank update is added to (or merged with) the frozen weights.
+
+**Why it's viable at 8 GB VRAM:** Because the vast majority of parameters stay frozen, LoRA drastically reduces the number of trainable parameters (often <1% of the full model), which cuts down the optimizer states, gradients, and activation memory that must be held in VRAM during training. That's what makes adapting even a 7B model feasible on a single consumer GPU where full fine-tuning (which needs memory for gradients and optimizer states across *all* parameters) is not.
+
+**Trade-off accepted:** The adaptation capacity is bounded by the rank `r` of the injected matrices, so LoRA can underfit very large or complex behavioural shifts compared to full fine-tuning — it's excellent for style/domain adaptation but has less capacity to fundamentally rewire the model's underlying knowledge. In practice this trade-off is usually acceptable for narrow, domain-specific adaptation like food-service customer queries.
+
+---
+
+## S3 — Two fundamental limitations of fine-tuning exposed by the complaint classifier
+
+**Limitation 1: Poor generalization beyond the training distribution.**
+The model performs well on common complaint types it saw thousands of times but fails on rare, unseen phrasing/categories — it pattern-matches to what it was trained on rather than reasoning about novel cases.
+- **Appropriate remedy: Few-shot prompting in the system prompt.**
+- **Condition under which it's valid:** this is the right fix when the rare case is a one-off or low-frequency edge case that can be captured in a handful of illustrative examples — it's a cheap, immediate patch that doesn't require touching the model or building a retrieval pipeline.
+
+**Limitation 2: Static, frozen knowledge that can't absorb new categories without retraining.**
+Once trained, the model's understanding of "what counts as a complaint type" is locked into its weights. New or evolving complaint categories (like culturally specific incidents) can't be incorporated without a costly and slow retraining cycle.
+- **Appropriate remedy: RAG**, retrieving from a living policy/knowledge base describing how novel complaint types should be classified and handled.
+- **Condition under which it's valid:** this is the right fix when such a knowledge base (support playbooks, past-ticket precedents, policy docs) exists or can be built and kept up to date — RAG only helps if there's something current to retrieve.
+- (Re-fine-tuning with more data only becomes the appropriate remedy once the "rare" complaint type stops being rare — i.e., enough labelled examples accumulate that it's now a recurring pattern worth baking into the model.)
+
+---
+
+## S4 — Perceive › Think › Act trace for the order-placement agent
+
+**User message:** *"Order 2 portions of Masala Dosa from Saravana Bhavan for delivery at 7 PM tonight."*
+
+**Perceive**
+The agent extracts structured entities from the raw text:
+- Item: "Masala Dosa", Quantity: 2
+- Restaurant: "Saravana Bhavan"
+- Requested time: "7 PM tonight" (relative time reference)
+- Implicit intent: place an order
+- Missing: delivery address (not stated in the message)
+
+**Think**
+The agent reasons over the perceived entities and resolves ambiguity:
+- Resolve "tonight" against the current date to get an absolute timestamp.
+- Note the delivery address is missing — decide to use the customer's default saved address rather than blocking on a clarifying question (a design choice; could also ask the user).
+- Plan the sequence of tool calls needed *before* committing to an order: first confirm the restaurant is open/available, then confirm the item is on the menu, then confirm a 7 PM delivery is achievable, and only then place the order.
+
+**Act**
+Tools are called in this order:
+1. `check_restaurant_status("Saravana Bhavan")`
+2. `check_menu_availability("Saravana Bhavan", "Masala Dosa")`
+3. `get_estimated_delivery_time(...)` — to verify 7 PM is realistically achievable
+4. `place_order(...)` — only if steps 1–3 all succeed
+
+**If Saravana Bhavan is unavailable at 7 PM:** the loop does not terminate or crash. The failed observation from step 1 (or step 3) is fed back into a new **Think** step: the agent re-plans — e.g., check if an earlier/later time works, suggest a similar nearby restaurant serving Masala Dosa, or surface the conflict to the user and ask how they'd like to proceed. The agent then perceives the user's reply and continues the loop from there.
+
+---
+
+## S5 — Designing a Database MCP Server
+
+**Tools to expose:**
+- `list_tables` — lets the connected assistant discover what data exists (orders, restaurants, delivery_partners, etc.) without needing prior schema knowledge.
+- `describe_table` — returns column names/types for a given table so the assistant can build valid queries.
+- `run_select_query` — executes a **read-only** SQL `SELECT` query against the data.
+
+**Access level: Read-only.**
+Support and analytics use cases are entirely about *retrieving* information (order status, delivery times, complaint history) — none of them require modifying data. Granting write access would violate the principle of least privilege and creates risk: a malformed or manipulated query (or a prompt-injection attempt) could corrupt or delete production data. Read-only access bounds the blast radius of any mistake or malicious input to "wrong answer," not "data loss."
+
+**Example realistic question:** *"What's the current status and ETA for order #FD4521, and how late is it running?"*
+
+**Safeguard against leaking sensitive data:** The safeguard should live at the data layer, not be left to the LLM's discretion. Concretely: expose `run_select_query` against **restricted database views** that simply omit PII columns (customer phone numbers, saved payment details) rather than the raw underlying tables — so even a broad `SELECT *` physically cannot return those fields. This can be paired with column-level permissions/role-based access control at the database level. Relying on an instruction like "don't return phone numbers" in a prompt is not a safeguard, since the model could still be misled into including them if the raw data is reachable; removing the sensitive columns from what's queryable is what actually stops it.
+
+---
+
+## S6 — ReAct trace for the refund/discount complaint
+
+**User message:** *"My order #FD4521 was 40 minutes late and the food arrived cold. I want either a full refund or a significant discount on my next order."*
+
+**Cycle 1**
+- **Reason:** Before promising any compensation, the agent needs to verify the facts of the complaint rather than trust the customer's claim at face value — it needs the actual recorded delivery time and lateness.
+- **Action:** `lookup_order_status("FD4521")` (or an equivalent delivery-time-check tool)
+- **Observation:** Confirms the order was placed at a given time and delivered ~40 minutes after the estimated time — the lateness claim is verified.
+
+**Cycle 2**
+- **Reason:** Given confirmed lateness beyond the policy threshold, the agent now needs to determine what compensation the customer is actually entitled to, rather than granting whatever the customer asked for.
+- **Action:** `check_refund_eligibility("FD4521")`
+- **Observation:** Returns eligibility status and the applicable remedy (e.g., "eligible for a full refund" or "eligible for a 20% discount on next order") per policy.
+
+The agent then produces its final response using the grounded observation from Cycle 2 (e.g., issuing the discount via `apply_discount` as a third action if appropriate).
+
+**Why separating Reason from Action matters here:** These are customer-facing decisions with real financial consequences (refunds cost money; wrongly denying a valid claim damages trust). Separating reasoning from action means the agent must justify *why* it's about to take an action, grounded in a tool observation, before it actually executes something irreversible. This makes the decision auditable (you can trace exactly which fact justified the refund), prevents the agent from acting on a hallucinated or unverified assumption, and creates a natural point where a guardrail — such as a policy check or a human-approval step for amounts above a threshold — can be inserted between "I've decided to refund" and "I've issued the refund."
