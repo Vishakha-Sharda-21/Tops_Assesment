@@ -1,0 +1,14 @@
+[
+  {"name": "Paneer Tikka Masala", "cuisine": "North Indian", "price": 240, "veg": true},
+  {"name": "Butter Chicken", "cuisine": "North Indian", "price": 280, "veg": false},
+  {"name": "Veg Hakka Noodles", "cuisine": "Chinese", "price": 180, "veg": true},
+  {"name": "Chilli Chicken", "cuisine": "Chinese", "price": 260, "veg": false},
+  {"name": "Margherita Pizza", "cuisine": "Italian", "price": 220, "veg": true},
+  {"name": "Chicken Alfredo Pasta", "cuisine": "Italian", "price": 310, "veg": false},
+  {"name": "Masala Dosa", "cuisine": "South Indian", "price": 130, "veg": true},
+  {"name": "Chicken Biryani", "cuisine": "Hyderabadi", "price": 250, "veg": false},
+  {"name": "Veg Biryani", "cuisine": "Hyderabadi", "price": 200, "veg": true},
+  {"name": "Falafel Wrap", "cuisine": "Middle Eastern", "price": 190, "veg": true},
+  {"name": "Chicken Shawarma", "cuisine": "Middle Eastern", "price": 210, "veg": false},
+  {"name": "Rajma Chawal", "cuisine": "North Indian", "price": 150, "veg": true}
+]

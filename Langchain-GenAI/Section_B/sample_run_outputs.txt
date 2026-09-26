@@ -1,0 +1,37 @@
+=== Task 1: task1_save_load_model.py ===
+$ python task1_save_load_model.py
+Test RMSE before saving: 2.991 minutes
+Model saved to 'delivery_model.joblib' (0.86 KB)
+Original model prediction:  27.6659
+Reloaded model prediction:  27.6659
+PASS: reloaded model output matches original model output
+
+
+=== Task 2: task2_flask_api.py ===
+Startup:
+Loaded model from 'delivery_model.joblib' at startup.
+
+$ curl -X POST http://127.0.0.1:5000/predict -H "Content-Type: application/json" \
+       -d '{"distance_km": 4.2, "num_items": 3, "rain_flag": 1}'
+-> 200 OK
+{"predicted_delivery_time_min": 27.7}
+
+$ curl -X POST http://127.0.0.1:5000/predict -H "Content-Type: application/json" \
+       -d '{"distance_km": 4.2, "num_items": 3}'
+-> 400 Bad Request
+{"error": "Missing required field(s)", "missing_fields": ["rain_flag"]}
+
+
+=== Section D: bug demonstration ===
+Original AI code, order id not in dictionary ("#999"):
+CRASH - KeyError: '#999'
+(unhandled exception, terminal loop dies)
+
+Corrected version, same input:
+Assistant: I couldn't find an order with ID '#999'. Could you double check the order number?
+(loop continues normally, no crash)
+
+Note: Task 3, Task 4, and the Section C capstone require a running LLM
+endpoint (Ollama or OpenAI) to produce live chat output, which isn't
+available in this offline environment - replace real screenshots of the
+Streamlit UI / chat loop once you run them against your own LLM endpoint.
